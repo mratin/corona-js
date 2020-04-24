@@ -122,22 +122,22 @@ class App extends Component<any, AppState> {
 
     let datasets = [
       {
-        title: 'Cases',
+        title: 'New Cases',
         color: 'rgba(75,192,192,0.3)',
         values: dvs.map(dv => dv.cases)
       },
       {
-        title: 'Cases (rolling avg)',
+        title: 'New Cases (rolling avg)',
         color: 'rgba(17,192,192,1)',
         values: dvs.map(dv => dv.rollingCases)
       },
       {
-        title: 'Deaths',
+        title: 'New Deaths',
         color: 'rgba(192,75,92,0.3)',
         values: dvs.map(dv => dv.deaths)
       },
       {
-        title: 'Deaths (rolling avg)',
+        title: 'New Deaths (rolling avg)',
         color: 'rgba(192,75,92,1)',
         values: dvs.map(dv => dv.rollingDeaths)
       }
