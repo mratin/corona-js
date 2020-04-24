@@ -1,5 +1,4 @@
 import React, { Component } from 'react';
-import logo from './logo.svg';
 import './App.css';
 import { Country, DataPoint, DateDataPoints } from './api/Country';
 import { isNumber } from 'util';

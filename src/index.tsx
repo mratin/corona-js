@@ -5,12 +5,13 @@ import App from './App'
 import * as serviceWorker from './serviceWorker'
 import { Router, Route } from 'react-router'
 import { createBrowserHistory } from 'history'
+import { HashRouter } from 'react-router-dom'
 
 ReactDOM.render(
   <React.StrictMode>
-    <Router history={createBrowserHistory()}>
+    <HashRouter>
       <Route path="/country/:countryCode" component={App}></Route>
-    </Router>
+    </HashRouter>
   </React.StrictMode>,
   document.getElementById('root')
 );
