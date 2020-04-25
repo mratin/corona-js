@@ -274,7 +274,7 @@ class App extends Component<any, AppState> {
 
     return (
       <Container>
-        <AppBar color="default" position="static">
+        <AppBar color="default" position="sticky">
           <Toolbar>
             <Box mr={4}>
               <FormControl>
