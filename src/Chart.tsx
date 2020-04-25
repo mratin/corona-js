@@ -8,6 +8,7 @@ export interface Dataset {
 }
 
 export interface CoronaChartProps {
+    title: string,
     labels: string[],
     datasets: Dataset[]
 }
@@ -43,10 +44,17 @@ export class CoronaChart extends React.Component<CoronaChartProps> {
                 pointRadius: 0,
                 pointHitRadius: 10,
                 data: dataset.values
-            }))
+            })),
         }
 
-        return (<Line data={data}/>)
+        const options = {
+            title: {
+                text: this.props.title,
+                display: true
+            },
+        }
+
+        return (<Line data={data} options={options}/>)
     }
 }
 

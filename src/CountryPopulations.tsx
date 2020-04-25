@@ -937,6 +937,10 @@ export const countryPopulations: {[index:string]: CountryPopulation} =
         "size": 244140,
         "population": 66573504
     },
+    "GB": {
+        "size": 244140,
+        "population": 66573504
+    },
     "US": {
         "size": 9629047,
         "population": 331002651
