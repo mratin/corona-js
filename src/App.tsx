@@ -1,12 +1,15 @@
-import React, { Component } from 'react';
-import './App.css';
-import { Country, DataPoint, DateDataPoints, Info } from './api/Country';
-import { isNumber } from 'util';
-import { CoronaChart, Dataset } from './Chart';
-import Select from '@material-ui/core/Select';
-import { MenuItem, FormControl, InputLabel, Container, AppBar, Toolbar, Checkbox, FormControlLabel, Box } from '@material-ui/core';
+import React, { Component } from 'react'
+import './App.css'
+import { Country, DataPoint, DateDataPoints, Info } from './api/Country'
+import { isNumber } from 'util'
+import { CoronaChart, Dataset } from './Chart'
+import Select from '@material-ui/core/Select'
+import { MenuItem, FormControl, InputLabel, Container, AppBar, Toolbar, Checkbox, FormControlLabel, Box } from '@material-ui/core'
 import countryCodes from './countryCodes.json'
 import { countryPopulations } from './CountryPopulations'
+import { colors, Color } from './colors'
+import queryString from 'querystring'
+import _ from 'lodash'
 
 interface CountryItem {
   code: string,
@@ -14,9 +17,7 @@ interface CountryItem {
 }
 
 interface AppState {
-  country: Country[],
-  isNormalized: boolean,
-  enableMultiple: boolean
+  country: Country[]
 }
 
 interface DateValues {
@@ -37,60 +38,45 @@ const emptyDataPoint: DataPoint = {
   total_deaths: 0
 }
 
-interface Color {
-  cases: string,
-  deaths: string
-}
-
-const colors: Color[] = [
-  {
-    cases: '17,192,192',
-    deaths: '192,75,92'
-  },
-  {
-    cases: '245,130,48',
-    deaths: '128,0,0'
-  },
-  {
-    cases: '150,210,0',
-    deaths: '128,0,0'
-  },
-  {
-    cases: '10,90,188',
-    deaths: '0,0,128'
-  },
-  {
-    cases: '200,150,205',
-    deaths: '128,0,0'
-  },
-  {
-    cases: '128,128,0',
-    deaths: '128,0,0'
-  },
-  {
-    cases: '250,60,100',
-    deaths: '128,0,0'
-  }
-]
-
 interface DataChart {
   title: string,
   datasets: Dataset[]
 }
 
+interface Settings {
+  isNormalized: boolean,
+  isComparisonMode: boolean
+}
+
 class App extends Component<any, AppState> {
   state: AppState = {
-    country: [],
-    isNormalized: false,
-    enableMultiple: false
+    country: []
   };
 
   constructor(props: any) {
     super(props)
   }
 
+  componentDidUpdate(prevProps: any) {
+    if (prevProps.match.params.countryCodes !== this.props.match.params.countryCodes) {
+      this.load()
+    }
+  }
+
+  parseCountryCodes(props: any): string[] {
+    return props.match.params.countryCodes.split(',')
+  }
+
   getCountryCodes(): string[] {
-    return this.props.match.params.countryCodes.split(',')
+    return this.parseCountryCodes(this.props)
+  }
+
+  getSettings(): Settings {
+    const values = queryString.parse(this.props.location.search.slice(1))
+    return {
+      isNormalized: _.get(values, 'normalized', 'false') === 'true',
+      isComparisonMode: _.get(values, 'comparisonMode', 'false') === 'true'
+    }
   }
 
   load() {
@@ -99,17 +85,24 @@ class App extends Component<any, AppState> {
 
   loadCountries(countryCodes: string[]) {
     let urls = countryCodes.map(cc => `https://api.thevirustracker.com/free-api?countryTimeline=${cc}`)
-
+    console.log("Fetching: " + countryCodes.join(","))
     Promise.all(urls.map(u => fetch(u)))
       .then(responses =>
         Promise.all(responses.map(res => res.json()))
           .then((data: Country[]) => this.setState({ ...this.state, country: data })))
   }
 
+  update(countryCodes: string[], settings: Settings) {
+    let params = [
+      ['comparisonMode', `${settings.isComparisonMode}`],
+      ['normalized', `${settings.isNormalized}`],
+    ].map(s => s.join('=')).join('&')
+
+    this.props.history.push('/country/' + countryCodes.join(',') + '?' + params)
+  }
+
   componentDidMount() {
-    let countryCodes = this.getCountryCodes()
-    this.setState({ ...this.state, enableMultiple: countryCodes.length > 1 })
-    this.loadCountries(countryCodes)
+    this.load()
   }
 
   private average(xs: number[]) {
@@ -117,7 +110,7 @@ class App extends Component<any, AppState> {
   }
 
   private normalize(countryCode: string, value: number): number {
-    if (this.state.isNormalized) {
+    if (this.getSettings().isNormalized) {
       let population = countryPopulations[countryCode].population
       return 1e6 * value / population
     } else {
@@ -151,12 +144,12 @@ class App extends Component<any, AppState> {
   }
 
   private getNormalizeSuffix() {
-    return this.state.isNormalized? " Per 1 Million Population" : ""
+    return this.getSettings().isNormalized ? " Per 1 Million Population" : ""
   }
 
   private createDataCharts(dates: string[], timelineitem: DateDataPoints, countryInfo: Info, color: Color): DataChart[] {
     let dvs = this.dateValues(countryInfo.code, dates, timelineitem)
-    
+
     return [
       {
         title: `${countryInfo.title}: New Cases and Deaths${this.getNormalizeSuffix()}`,
@@ -260,41 +253,39 @@ class App extends Component<any, AppState> {
 
     let allDates: Date[] = this.state.country
       .map(c => c.timelineitems[0])
-      .map(t => Object.keys(t).filter(d => d !== 'stat')
+      .map(t => Object.keys(t).filter(d => d !== 'stat' && t[d].total_deaths >= 1)
         .map((d: string) => new Date(d))).flat()
     let dates: string[] = Array.from(new Set(allDates.sort((a, b) => a.getTime() - b.getTime()).map(d => this.toDateKey(d))))
 
-    let allSets = this.state.country.map((c, i) => {
-      return this.state.enableMultiple
-        ? this.createComparisonDataCharts(dates, c.timelineitems[0], c.countrytimelinedata[0].info, colors[i % colors.length])
-        : this.createDataCharts(dates, c.timelineitems[0], c.countrytimelinedata[0].info, colors[i % colors.length])
-    })
+    let allDataCharts: DataChart[][] = this.getSettings().isComparisonMode
+      ? this.state.country.map((c, i) =>
+        this.createComparisonDataCharts(dates, c.timelineitems[0], c.countrytimelinedata[0].info, colors[i % colors.length])
+      )
+      : [this.createDataCharts(dates, this.state.country[0].timelineitems[0], this.state.country[0].countrytimelinedata[0].info, colors[0])]
 
-    let numberOfCharts: number = Math.min(...allSets.map(s => s.length))
+    let numberOfCharts: number = Math.min(...allDataCharts.map(s => s.length))
 
     return (
-      <Container>
+      <Container maxWidth="xl">
         <AppBar color="default" position="sticky">
           <Toolbar>
             <Box mr={4}>
               <FormControl>
                 <InputLabel id="select-country">Country</InputLabel>
                 <Select
-                  multiple={this.state.enableMultiple}
+                  multiple={this.getSettings().isComparisonMode}
                   labelId="select-country"
                   id="select-country"
-                  value={this.state.enableMultiple ? this.getCountryCodes() : this.getCountryCodes()[0]}
+                  value={this.getSettings().isComparisonMode ? this.getCountryCodes() : this.getCountryCodes()[0]}
                   onChange={(e) => {
-                    if (this.state.enableMultiple) {
+                    if (this.getSettings().isComparisonMode) {
                       let countryCodes = e.target.value as string[]
                       if (countryCodes.length > 0) {
-                        this.props.history.push('/country/' + countryCodes.join(','));
+                        this.update(countryCodes, this.getSettings())
                       }
-                      this.loadCountries(countryCodes)
                     } else {
                       let countryCode = e.target.value as string
-                      this.props.history.push('/country/' + countryCode);
-                      this.loadCountries([countryCode])
+                      this.update([countryCode], this.getSettings());
                     }
                   }}>
                   {countryCodes.map(c =>
@@ -307,8 +298,8 @@ class App extends Component<any, AppState> {
               <FormControlLabel
                 control={
                   <Checkbox
-                    checked={this.state.isNormalized}
-                    onChange={(e) => this.setState({ ...this.state, isNormalized: e.target.checked })}
+                    checked={this.getSettings().isNormalized}
+                    onChange={(e) => this.update(this.getCountryCodes(), { ...this.getSettings(), isNormalized: e.target.checked })}
                     name="normalized"
                     color="primary"
                   />}
@@ -317,12 +308,9 @@ class App extends Component<any, AppState> {
               <FormControlLabel
                 control={
                   <Checkbox
-                    checked={this.state.enableMultiple}
+                    checked={this.getSettings().isComparisonMode}
                     onChange={(e) => {
-                      let enableMultiple = e.target.checked
-                      this.setState({ ...this.state, enableMultiple: enableMultiple })
-                      let countryCodes = enableMultiple ? this.getCountryCodes() : [this.getCountryCodes()[0]]
-                      this.loadCountries(countryCodes)
+                      this.update(this.getCountryCodes(), { ...this.getSettings(), isComparisonMode: e.target.checked })
                     }}
                     name="enableMultiple"
                     color="primary"
@@ -333,7 +321,7 @@ class App extends Component<any, AppState> {
           </Toolbar>
         </AppBar>
         {Array.from(Array(numberOfCharts).keys()).map(i =>
-          <CoronaChart title={allSets[0][i].title} labels={dates} datasets={allSets.map(s => s[i].datasets).flat()} />
+          <CoronaChart title={allDataCharts[0][i].title} labels={dates} datasets={allDataCharts.map(s => s[i].datasets).flat()} />
         )}
       </Container>
     );
