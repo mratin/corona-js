@@ -47,7 +47,8 @@ interface DataChart {
 interface Settings {
   normalized: SValue<boolean>,
   comparisonMode: SValue<boolean>,
-  startAtFirstDeaths: SValue<number>
+  startAtFirstDeaths: SValue<number>,
+  rollingDays: SValue<number>
 }
 
 class S<T> {
@@ -67,31 +68,24 @@ class S<T> {
   }
 }
 
-const parseBoolean = (s: string) => s === 'true'
-const serializeBoolean = (t: boolean) => `${t}`
-const parseNumber = (s: string) => Number(s)
-const serializeNumber = (t: number) => `${t}`
+const booleanSetting = (name: string, defaultValue: boolean) => ({  
+    name: name,
+    defaultValue: defaultValue,
+    parse: (s: string) => s === 'true',
+    serialize: (t: boolean) => `${t}`
+}) 
 
-const Normalized: S<boolean> = {
-  name: 'normalized',
-  defaultValue: false,
-  parse: parseBoolean,
-  serialize: serializeBoolean
-}
+const numberSetting = (name: string, defaultValue: number) => ({  
+  name: name,
+  defaultValue: defaultValue,
+  parse: (s: string) => Number(s),
+  serialize: (t: number) => `${t}`
+})
 
-const ComparisonMode: S<boolean> = {
-  name: 'comparisonMode',
-  defaultValue: false,
-  parse: parseBoolean,
-  serialize: serializeBoolean
-}
-
-const StartAtFirstDeaths: S<number> = {
-  name: 'startAtFirstDeaths',
-  defaultValue: 0,
-  parse: parseNumber,
-  serialize: serializeNumber
-}
+const Normalized: S<boolean> = booleanSetting('normalized', false)
+const ComparisonMode: S<boolean> = booleanSetting('comparisonMode', false)
+const StartAtFirstDeaths: S<number> = numberSetting('startAtFirstDeaths', 0)
+const RollingDays: S<number> = numberSetting('rollingDays', 7)
 
 interface SValue<T> {
   s: S<T>,
@@ -130,13 +124,12 @@ class App extends Component<any, AppState> {
   getSettings(): Settings {
     const values = queryString.parse(this.props.location.search.slice(1))
 
-    let settings = {
+    return {
       normalized: this.getSetting<boolean>(Normalized, values),
       comparisonMode: this.getSetting<boolean>(ComparisonMode, values),
-      startAtFirstDeaths: this.getSetting<number>(StartAtFirstDeaths, values)
+      startAtFirstDeaths: this.getSetting<number>(StartAtFirstDeaths, values),
+      rollingDays: this.getSetting<number>(RollingDays, values)
     }
-
-    return settings
   }
 
   load() {
@@ -154,7 +147,8 @@ class App extends Component<any, AppState> {
   }
 
   update(countryCodes: string[], settings: Settings) {
-    let settingValues: SValue<any>[] = [settings.normalized, settings.comparisonMode, settings.startAtFirstDeaths]
+    let settingValues: SValue<any>[] = 
+    [settings.normalized, settings.comparisonMode, settings.startAtFirstDeaths, settings.rollingDays]
     let params = settingValues
       .filter(setting => setting.value !== setting.s.defaultValue)
       .map(setting => `${setting.s.name}=${setting.s.serialize(setting.value)}`)
@@ -168,7 +162,7 @@ class App extends Component<any, AppState> {
   }
 
   private average(xs: number[]) {
-    return xs.filter(x => isNumber(x)).reduce((a, b) => a + b) / xs.length
+    return xs.filter(x => isNumber(x)).reduce((a, b) => a + b, 0) / xs.length
   }
 
   private normalize(countryCode: string, value: number): number {
@@ -181,12 +175,12 @@ class App extends Component<any, AppState> {
   }
 
   private dateValues(countryCode: string, dates: string[], dateDataPoints: DateDataPoints): DateValues[] {
-    let roll = 7
+    let roll = Math.max(this.getSettings().rollingDays.value, 1)
 
     return dates.map((date, i) => {
       let day: DataPoint = dateDataPoints[date] || emptyDataPoint
 
-      let rollingDays = dates.slice(Math.max(i - (roll / 2), 0), i + (roll / 2))
+      let rollingDays = dates.slice(Math.max(i - Math.floor(roll / 2), 0), i + Math.ceil(roll / 2))
 
       let rolling = (f: (t: DataPoint) => number) => {
         let rollingValues = rollingDays.map(d => f(dateDataPoints[d] || emptyDataPoint))
