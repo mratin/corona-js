@@ -1,5 +1,5 @@
 import React from 'react'
-import { defaults, ChartComponentProps, Line } from 'react-chartjs-2'
+import { Line } from 'react-chartjs-2'
 
 export interface Dataset {
     title: string,
