@@ -45,7 +45,8 @@ interface DataChart {
 
 interface Settings {
   normalized: SValue<boolean>,
-  comparisonMode: SValue<boolean>
+  comparisonMode: SValue<boolean>,
+  startAtFirstDeaths: SValue<number>
 }
 
 class S<T> {
@@ -67,6 +68,8 @@ class S<T> {
 
 const parseBoolean = (s: string) => s === 'true'
 const serializeBoolean = (t: boolean) => `${t}`
+const parseNumber = (s: string) => Number(s)
+const serializeNumber = (t: number) => `${t}`
 
 const Normalized: S<boolean> = {
   name: 'normalized',
@@ -82,7 +85,14 @@ const ComparisonMode: S<boolean> = {
   serialize: serializeBoolean
 }
 
-const AllSettings = [Normalized, ComparisonMode]
+const StartAtFirstDeaths: S<number> = {
+  name: 'startAtFirstDeaths',
+  defaultValue: 0,
+  parse: parseNumber,
+  serialize: serializeNumber
+}
+
+const AllSettings = [Normalized, ComparisonMode, StartAtFirstDeaths]
 
 interface SValue<T> {
   s: S<T>,
@@ -127,7 +137,8 @@ class App extends Component<any, AppState> {
 
     let settings = {
       normalized: this.getSetting<boolean>(Normalized, values),
-      comparisonMode: this.getSetting<boolean>(ComparisonMode, values)
+      comparisonMode: this.getSetting<boolean>(ComparisonMode, values),
+      startAtFirstDeaths: this.getSetting<number>(StartAtFirstDeaths, values)
     }
 
     return settings
@@ -148,12 +159,8 @@ class App extends Component<any, AppState> {
   }
 
   update(countryCodes: string[], settings: Settings) {
-    // let params = [
-    //   ['comparisonMode', `${settings.isComparisonMode}`],
-    //   ['normalized', `${settings.isNormalized}`],
-    // ].map(s => s.join('=')).join('&')
-
-    let params = [settings.normalized, settings.comparisonMode]
+    let settingValues: SValue<any>[] = [settings.normalized, settings.comparisonMode, settings.startAtFirstDeaths]
+    let params = settingValues
       .filter(setting => setting.value !== setting.s.defaultValue)
       .map(setting => `${setting.s.name}=${setting.s.serialize(setting.value)}`)
       .join('&')
@@ -313,7 +320,7 @@ class App extends Component<any, AppState> {
 
     let allDates: Date[] = this.state.country
       .map(c => c.timelineitems[0])
-      .map(t => Object.keys(t).filter(d => d !== 'stat' && t[d].total_deaths >= 1)
+      .map(t => Object.keys(t).filter(d => d !== 'stat' && t[d].total_deaths >= this.getSettings().startAtFirstDeaths.value)
         .map((d: string) => new Date(d))).flat()
     let dates: string[] = Array.from(new Set(allDates.sort((a, b) => a.getTime() - b.getTime()).map(d => this.toDateKey(d))))
 
