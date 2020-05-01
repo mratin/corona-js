@@ -8,7 +8,7 @@ import { MenuItem, FormControl, InputLabel, Container, AppBar, Toolbar, Checkbox
 import countryCodes from './countryCodes.json'
 import { countryPopulations } from './CountryPopulations'
 import { colors, Color } from './colors'
-import queryString from 'querystring'
+import queryString, { ParsedUrlQuery } from 'querystring'
 import _ from 'lodash'
 
 interface CountryItem {
@@ -44,8 +44,49 @@ interface DataChart {
 }
 
 interface Settings {
-  isNormalized: boolean,
-  isComparisonMode: boolean
+  normalized: SValue<boolean>,
+  comparisonMode: SValue<boolean>
+}
+
+class S<T> {
+  name: string
+  defaultValue: T
+
+  constructor(name: string, defaultValue: T) {
+    this.name = name
+    this.defaultValue = defaultValue
+  }
+
+  parse(s: string | string[]): T {
+    return s as any as T
+  }
+  serialize(t: T): string {
+    return `${t}`
+  }
+}
+
+const parseBoolean = (s: string) => s === 'true'
+const serializeBoolean = (t: boolean) => `${t}`
+
+const Normalized: S<boolean> = {
+  name: 'normalized',
+  defaultValue: false,
+  parse: parseBoolean,
+  serialize: serializeBoolean
+}
+
+const ComparisonMode: S<boolean> = {
+  name: 'comparisonMode',
+  defaultValue: false,
+  parse: parseBoolean,
+  serialize: serializeBoolean
+}
+
+const AllSettings = [Normalized, ComparisonMode]
+
+interface SValue<T> {
+  s: S<T>,
+  value: T
 }
 
 class App extends Component<any, AppState> {
@@ -71,12 +112,25 @@ class App extends Component<any, AppState> {
     return this.parseCountryCodes(this.props)
   }
 
+  getSetting<T>(s: S<T>, parsedQueryString: ParsedUrlQuery): SValue<T> {
+    let param = _.get(parsedQueryString, s.name)
+    let v = (param === undefined) ? s.defaultValue : s.parse(param)
+
+    return {
+      s: s,
+      value: v
+    }
+  }
+
   getSettings(): Settings {
     const values = queryString.parse(this.props.location.search.slice(1))
-    return {
-      isNormalized: _.get(values, 'normalized', 'false') === 'true',
-      isComparisonMode: _.get(values, 'comparisonMode', 'false') === 'true'
+
+    let settings = {
+      normalized: this.getSetting<boolean>(Normalized, values),
+      comparisonMode: this.getSetting<boolean>(ComparisonMode, values)
     }
+
+    return settings
   }
 
   load() {
@@ -88,15 +142,21 @@ class App extends Component<any, AppState> {
     console.log("Fetching: " + countryCodes.join(","))
     Promise.all(urls.map(u => fetch(u)))
       .then(responses =>
-        Promise.all(responses.map(res => res.json()))
+        Promise.all(responses
+          .map(res => res.text().then(t => JSON.parse(t.slice(t.indexOf('{'))))))
           .then((data: Country[]) => this.setState({ ...this.state, country: data })))
   }
 
   update(countryCodes: string[], settings: Settings) {
-    let params = [
-      ['comparisonMode', `${settings.isComparisonMode}`],
-      ['normalized', `${settings.isNormalized}`],
-    ].map(s => s.join('=')).join('&')
+    // let params = [
+    //   ['comparisonMode', `${settings.isComparisonMode}`],
+    //   ['normalized', `${settings.isNormalized}`],
+    // ].map(s => s.join('=')).join('&')
+
+    let params = [settings.normalized, settings.comparisonMode]
+      .filter(setting => setting.value !== setting.s.defaultValue)
+      .map(setting => `${setting.s.name}=${setting.s.serialize(setting.value)}`)
+      .join('&')
 
     this.props.history.push('/country/' + countryCodes.join(',') + '?' + params)
   }
@@ -110,7 +170,7 @@ class App extends Component<any, AppState> {
   }
 
   private normalize(countryCode: string, value: number): number {
-    if (this.getSettings().isNormalized) {
+    if (this.getSettings().normalized.value) {
       let population = countryPopulations[countryCode].population
       return 1e6 * value / population
     } else {
@@ -144,7 +204,7 @@ class App extends Component<any, AppState> {
   }
 
   private getNormalizeSuffix() {
-    return this.getSettings().isNormalized ? " Per 1 Million Population" : ""
+    return this.getSettings().normalized.value ? " Per 1 Million Population" : ""
   }
 
   private createDataCharts(dates: string[], timelineitem: DateDataPoints, countryInfo: Info, color: Color): DataChart[] {
@@ -257,7 +317,7 @@ class App extends Component<any, AppState> {
         .map((d: string) => new Date(d))).flat()
     let dates: string[] = Array.from(new Set(allDates.sort((a, b) => a.getTime() - b.getTime()).map(d => this.toDateKey(d))))
 
-    let allDataCharts: DataChart[][] = this.getSettings().isComparisonMode
+    let allDataCharts: DataChart[][] = this.getSettings().comparisonMode.value
       ? this.state.country.map((c, i) =>
         this.createComparisonDataCharts(dates, c.timelineitems[0], c.countrytimelinedata[0].info, colors[i % colors.length])
       )
@@ -273,12 +333,12 @@ class App extends Component<any, AppState> {
               <FormControl>
                 <InputLabel id="select-country">Country</InputLabel>
                 <Select
-                  multiple={this.getSettings().isComparisonMode}
+                  multiple={this.getSettings().comparisonMode.value}
                   labelId="select-country"
                   id="select-country"
-                  value={this.getSettings().isComparisonMode ? this.getCountryCodes() : this.getCountryCodes()[0]}
+                  value={this.getSettings().comparisonMode.value ? this.getCountryCodes() : this.getCountryCodes()[0]}
                   onChange={(e) => {
-                    if (this.getSettings().isComparisonMode) {
+                    if (this.getSettings().comparisonMode.value) {
                       let countryCodes = e.target.value as string[]
                       if (countryCodes.length > 0) {
                         this.update(countryCodes, this.getSettings())
@@ -298,8 +358,10 @@ class App extends Component<any, AppState> {
               <FormControlLabel
                 control={
                   <Checkbox
-                    checked={this.getSettings().isNormalized}
-                    onChange={(e) => this.update(this.getCountryCodes(), { ...this.getSettings(), isNormalized: e.target.checked })}
+                    checked={this.getSettings().normalized.value}
+                    onChange={(e) => this.update(this.getCountryCodes(),
+                      { ...this.getSettings(), normalized: ({ s: Normalized, value: e.target.checked }) })
+                    }
                     name="normalized"
                     color="primary"
                   />}
@@ -308,10 +370,11 @@ class App extends Component<any, AppState> {
               <FormControlLabel
                 control={
                   <Checkbox
-                    checked={this.getSettings().isComparisonMode}
-                    onChange={(e) => {
-                      this.update(this.getCountryCodes(), { ...this.getSettings(), isComparisonMode: e.target.checked })
-                    }}
+                    checked={this.getSettings().comparisonMode.value}
+                    onChange={(e) =>
+                      this.update(this.getCountryCodes(),
+                        { ...this.getSettings(), comparisonMode: ({ s: ComparisonMode, value: e.target.checked }) })
+                    }
                     name="enableMultiple"
                     color="primary"
                   />}
