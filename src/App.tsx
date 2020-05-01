@@ -4,7 +4,8 @@ import { Country, DataPoint, DateDataPoints, Info } from './api/Country'
 import { isNumber } from 'util'
 import { CoronaChart, Dataset } from './Chart'
 import Select from '@material-ui/core/Select'
-import { MenuItem, FormControl, InputLabel, Container, AppBar, Toolbar, Checkbox, FormControlLabel, Box } from '@material-ui/core'
+import { MenuItem, FormControl, InputLabel, Container, AppBar, Toolbar, Checkbox, FormControlLabel, Box, Paper } from '@material-ui/core'
+import Alert from '@material-ui/lab/Alert';
 import countryCodes from './countryCodes.json'
 import { countryPopulations } from './CountryPopulations'
 import { colors, Color } from './colors'
@@ -92,8 +93,6 @@ const StartAtFirstDeaths: S<number> = {
   serialize: serializeNumber
 }
 
-const AllSettings = [Normalized, ComparisonMode, StartAtFirstDeaths]
-
 interface SValue<T> {
   s: S<T>,
   value: T
@@ -103,10 +102,6 @@ class App extends Component<any, AppState> {
   state: AppState = {
     country: []
   };
-
-  constructor(props: any) {
-    super(props)
-  }
 
   componentDidUpdate(prevProps: any) {
     if (prevProps.match.params.countryCodes !== this.props.match.params.countryCodes) {
@@ -316,21 +311,35 @@ class App extends Component<any, AppState> {
   }
 
   render() {
-    if (this.state.country.length === 0) return <div />
+    const { country } = this.state;
+    if (country.length === 0) return <div />
 
-    let allDates: Date[] = this.state.country
+    let allDates: Date[] = country
+      .filter(c => c.timelineitems)
       .map(c => c.timelineitems[0])
       .map(t => Object.keys(t).filter(d => d !== 'stat' && t[d].total_deaths >= this.getSettings().startAtFirstDeaths.value)
         .map((d: string) => new Date(d))).flat()
     let dates: string[] = Array.from(new Set(allDates.sort((a, b) => a.getTime() - b.getTime()).map(d => this.toDateKey(d))))
 
-    let allDataCharts: DataChart[][] = this.getSettings().comparisonMode.value
-      ? this.state.country.map((c, i) =>
+    let allDataCharts: DataChart[][] = dates.length > 0 ? (this.getSettings().comparisonMode.value
+      ? country.map((c, i) =>
         this.createComparisonDataCharts(dates, c.timelineitems[0], c.countrytimelinedata[0].info, colors[i % colors.length])
       )
-      : [this.createDataCharts(dates, this.state.country[0].timelineitems[0], this.state.country[0].countrytimelinedata[0].info, colors[0])]
+      : [this.createDataCharts(dates, country[0].timelineitems[0], country[0].countrytimelinedata[0].info, colors[0])])
+      : []
 
-    let numberOfCharts: number = Math.min(...allDataCharts.map(s => s.length))
+    let numberOfCharts: number = allDataCharts.length > 0 ? Math.min(...allDataCharts.map(s => s.length)) : 0
+
+    let chartContent = numberOfCharts > 0 ?
+      <Paper elevation={2}>
+        {Array.from(Array(numberOfCharts).keys()).map(i =>
+                <CoronaChart key={i} title={allDataCharts[0][i].title} labels={dates} datasets={allDataCharts.map(s => s[i].datasets).flat()} />
+        )}
+      </Paper>
+       :
+       <Paper style={{margin: 'auto', width: 'fit-content'}}>
+        <Alert style={{maxWidth: 256}} severity="error">Selected country is missing data!</Alert>
+       </Paper>
 
     return (
       <Container maxWidth="xl">
@@ -356,7 +365,7 @@ class App extends Component<any, AppState> {
                     }
                   }}>
                   {countryCodes.map(c =>
-                    <MenuItem value={c.code}>{c.name}</MenuItem>
+                    <MenuItem key={c.code} value={c.code}>{c.name}</MenuItem>
                   )}
                 </Select>
               </FormControl>
@@ -390,9 +399,9 @@ class App extends Component<any, AppState> {
             </Box>
           </Toolbar>
         </AppBar>
-        {Array.from(Array(numberOfCharts).keys()).map(i =>
-          <CoronaChart title={allDataCharts[0][i].title} labels={dates} datasets={allDataCharts.map(s => s[i].datasets).flat()} />
-        )}
+        <Box marginTop={4}>
+          {chartContent}
+        </Box>
       </Container>
     );
   }
