@@ -377,7 +377,8 @@ class App extends Component<any, AppState> {
     const { country } = this.state;
     if (country.length === 0) return <div />
 
-    let allDates: Date[] = country
+    let countries = this.getSettings().comparisonMode.value ? country : [country[0]]
+    let allDates: Date[] = countries
       .filter(c => c.timelineitems)
       .map(c => c.timelineitems[0])
       .map(t => Object.keys(t).filter(d => d !== 'stat' && t[d].total_deaths >= this.getSettings().startAtFirstDeaths.value)
@@ -385,10 +386,10 @@ class App extends Component<any, AppState> {
     let dates: string[] = Array.from(new Set(allDates.sort((a, b) => a.getTime() - b.getTime()).map(d => this.toDateKey(d))))
 
     let allDataCharts: DataChart[][] = dates.length > 0 ? (this.getSettings().comparisonMode.value
-      ? country.map((c, i) =>
+      ? countries.map((c, i) =>
         this.createComparisonDataCharts(dates, c.timelineitems[0], c.countrytimelinedata[0].info, colors[i % colors.length])
       )
-      : [this.createDataCharts(dates, country[0].timelineitems[0], country[0].countrytimelinedata[0].info, colors[0])])
+      : [this.createDataCharts(dates, countries[0].timelineitems[0], countries[0].countrytimelinedata[0].info, colors[0])])
       : []
 
     let numberOfCharts: number = allDataCharts.length > 0 ? Math.min(...allDataCharts.map(s => s.length)) : 0
