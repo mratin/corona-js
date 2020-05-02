@@ -9,6 +9,7 @@ import { HashRouter } from 'react-router-dom'
 ReactDOM.render(
   <React.StrictMode>
     <HashRouter>
+      <Route exact path="/" component={App}></Route>
       <Route path="/country/:countryCodes" component={App}></Route>
     </HashRouter>
   </React.StrictMode>,

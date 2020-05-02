@@ -4,10 +4,10 @@ import { Country, DataPoint, DateDataPoints, Info } from './api/Country'
 import { isNumber } from 'util'
 import { CoronaChart, Dataset } from './Chart'
 import Select from '@material-ui/core/Select'
-import { MenuItem, FormControl, InputLabel, Container, AppBar, Toolbar, Checkbox, FormControlLabel, Box, Paper, Button, Drawer, Theme, List, ListItem, ListItemIcon, ListItemText, Divider, Typography, Card, CardContent } from '@material-ui/core'
+import { MenuItem, FormControl, InputLabel, Container, AppBar, Toolbar, Checkbox, FormControlLabel, Box, Paper, Button, Drawer, Theme, List, ListItem, Typography, Card, CardContent } from '@material-ui/core'
 import Alert from '@material-ui/lab/Alert';
-import countryCodes from './countryCodes.json'
-import { countryPopulations } from './CountryPopulations'
+import countryCodes from './data/countryCodes.json'
+import { countryPopulations } from './data/CountryPopulations'
 import { colors, Color } from './colors'
 import queryString, { ParsedUrlQuery } from 'querystring'
 import _ from 'lodash'
@@ -26,7 +26,7 @@ interface CountryItem {
 }
 
 interface AppState {
-  country: Country[],
+  selectedCountries: Country[],
   showSettingsDrawer: boolean
 }
 
@@ -108,7 +108,7 @@ interface LabelledValue<T> {
 
 class App extends Component<any, AppState> {
   state: AppState = {
-    country: [],
+    selectedCountries: [],
     showSettingsDrawer: false
   };
 
@@ -119,7 +119,8 @@ class App extends Component<any, AppState> {
   }
 
   parseCountryCodes(props: any): string[] {
-    return props.match.params.countryCodes.split(',')
+    const { countryCodes } = props.match.params
+    return countryCodes ? countryCodes.split(',') : []
   }
 
   getCountryCodes(): string[] {
@@ -158,7 +159,7 @@ class App extends Component<any, AppState> {
       .then(responses =>
         Promise.all(responses
           .map(res => res.text().then(t => JSON.parse(t.slice(t.indexOf('{'))))))
-          .then((data: Country[]) => this.setState({ ...this.state, country: data })))
+          .then((data: Country[]) => this.setState({ ...this.state, selectedCountries: data })))
   }
 
   update(countryCodes: string[], settings: Settings) {
@@ -374,35 +375,42 @@ class App extends Component<any, AppState> {
   }
 
   render() {
-    const { country } = this.state;
-    if (country.length === 0) return <div />
+    const { selectedCountries } = this.state;
+    const comparisonModeOn = this.getSettings().comparisonMode.value;
 
-    let allDates: Date[] = country
-      .filter(c => c.timelineitems)
+    const countriesWithData = selectedCountries.filter(c => c.timelineitems)
+
+    let allDates: Date[] = countriesWithData
       .map(c => c.timelineitems[0])
       .map(t => Object.keys(t).filter(d => d !== 'stat' && t[d].total_deaths >= this.getSettings().startAtFirstDeaths.value)
         .map((d: string) => new Date(d))).flat()
     let dates: string[] = Array.from(new Set(allDates.sort((a, b) => a.getTime() - b.getTime()).map(d => this.toDateKey(d))))
 
-    let allDataCharts: DataChart[][] = dates.length > 0 ? (this.getSettings().comparisonMode.value
-      ? country.map((c, i) =>
-        this.createComparisonDataCharts(dates, c.timelineitems[0], c.countrytimelinedata[0].info, colors[i % colors.length])
+    let allDataCharts: DataChart[][] = countriesWithData.length > 0 ? (comparisonModeOn
+      ? countriesWithData.map((c, i) => 
+          this.createComparisonDataCharts(dates, c.timelineitems[0], c.countrytimelinedata[0].info, colors[i % colors.length])
       )
-      : [this.createDataCharts(dates, country[0].timelineitems[0], country[0].countrytimelinedata[0].info, colors[0])])
+      : selectedCountries[0].timelineitems ? [this.createDataCharts(dates, selectedCountries[0].timelineitems[0], selectedCountries[0].countrytimelinedata[0].info, colors[0])] : [])
       : []
 
     let numberOfCharts: number = allDataCharts.length > 0 ? Math.min(...allDataCharts.map(s => s.length)) : 0
 
     let chartContent = numberOfCharts > 0 ?
       <Paper elevation={2}>
+        { comparisonModeOn && selectedCountries.length !== countriesWithData.length && 
+          <Box>
+            <Alert style={{ justifyContent: 'center' }} severity="warning">One of the selected countries is missing data!</Alert>
+          </Box>
+        }
         {Array.from(Array(numberOfCharts).keys()).map(i =>
           <CoronaChart key={i} title={allDataCharts[0][i].title} labels={dates} datasets={allDataCharts.map(s => s[i].datasets).flat()} />
         )}
       </Paper>
-      :
+      : selectedCountries.length > 0 ?
       <Paper style={{ margin: 'auto', width: 'fit-content' }}>
-        <Alert style={{ maxWidth: 256 }} severity="error">Selected country is missing data!</Alert>
+        <Alert style={{ maxWidth: 384 }} severity="error">{ selectedCountries.length > 1 && comparisonModeOn ? 'Selected countries are missing data!' : 'Selected country is missing data!'}</Alert>
       </Paper>
+      : <Alert style={{ margin: 'auto', width: 'fit-content', maxWidth: 384 }} severity="info">Select one or more countries to begin!</Alert>
 
     return (
       <Container maxWidth="xl">
@@ -412,6 +420,7 @@ class App extends Component<any, AppState> {
               <FormControl>
                 <InputLabel id="select-country">Country</InputLabel>
                 <Select
+                  style={{ minWidth: 96 }}
                   multiple={this.getSettings().comparisonMode.value}
                   labelId="select-country"
                   id="select-country"
