@@ -3,7 +3,7 @@ import { Line } from 'react-chartjs-2'
 
 export interface Dataset {
     title: string,
-    values: number[],
+    values: (number | undefined)[],
     color: string
 }
 

@@ -4,13 +4,21 @@ import { Country, DataPoint, DateDataPoints, Info } from './api/Country'
 import { isNumber } from 'util'
 import { CoronaChart, Dataset } from './Chart'
 import Select from '@material-ui/core/Select'
-import { MenuItem, FormControl, InputLabel, Container, AppBar, Toolbar, Checkbox, FormControlLabel, Box, Paper } from '@material-ui/core'
+import { MenuItem, FormControl, InputLabel, Container, AppBar, Toolbar, Checkbox, FormControlLabel, Box, Paper, Button, Drawer, Theme, List, ListItem, ListItemIcon, ListItemText, Divider, Typography, Card, CardContent } from '@material-ui/core'
 import Alert from '@material-ui/lab/Alert';
 import countryCodes from './countryCodes.json'
 import { countryPopulations } from './CountryPopulations'
 import { colors, Color } from './colors'
 import queryString, { ParsedUrlQuery } from 'querystring'
 import _ from 'lodash'
+import { withStyles } from '@material-ui/styles'
+import SettingsIcon from '@material-ui/icons/Settings'
+
+const styles = (theme: Theme) => ({
+  grow: {
+    flexGrow: 1,
+  }
+})
 
 interface CountryItem {
   code: string,
@@ -18,16 +26,17 @@ interface CountryItem {
 }
 
 interface AppState {
-  country: Country[]
+  country: Country[],
+  showSettingsDrawer: boolean
 }
 
 interface DateValues {
   date: string,
   cases: number,
   cumulativeCases: number,
-  rollingCases: number,
+  rollingCases: number | undefined,
   deaths: number,
-  rollingDeaths: number,
+  rollingDeaths: number | undefined,
   cumulativeDeaths: number,
 }
 
@@ -68,14 +77,14 @@ class S<T> {
   }
 }
 
-const booleanSetting = (name: string, defaultValue: boolean) => ({  
-    name: name,
-    defaultValue: defaultValue,
-    parse: (s: string) => s === 'true',
-    serialize: (t: boolean) => `${t}`
-}) 
+const booleanSetting = (name: string, defaultValue: boolean) => ({
+  name: name,
+  defaultValue: defaultValue,
+  parse: (s: string) => s === 'true',
+  serialize: (t: boolean) => `${t}`
+})
 
-const numberSetting = (name: string, defaultValue: number) => ({  
+const numberSetting = (name: string, defaultValue: number) => ({
   name: name,
   defaultValue: defaultValue,
   parse: (s: string) => Number(s),
@@ -92,9 +101,15 @@ interface SValue<T> {
   value: T
 }
 
+interface LabelledValue<T> {
+  label: string,
+  value: T
+}
+
 class App extends Component<any, AppState> {
   state: AppState = {
-    country: []
+    country: [],
+    showSettingsDrawer: false
   };
 
   componentDidUpdate(prevProps: any) {
@@ -147,8 +162,8 @@ class App extends Component<any, AppState> {
   }
 
   update(countryCodes: string[], settings: Settings) {
-    let settingValues: SValue<any>[] = 
-    [settings.normalized, settings.comparisonMode, settings.startAtFirstDeaths, settings.rollingDays]
+    let settingValues: SValue<any>[] =
+      [settings.normalized, settings.comparisonMode, settings.startAtFirstDeaths, settings.rollingDays]
     let params = settingValues
       .filter(setting => setting.value !== setting.s.defaultValue)
       .map(setting => `${setting.s.name}=${setting.s.serialize(setting.value)}`)
@@ -187,13 +202,17 @@ class App extends Component<any, AppState> {
         return Math.round(this.average(rollingValues))
       }
 
+      let rollingDefined = i < dates.length - Math.floor(roll / 2)
+      let rollingCases = rollingDefined ? this.normalize(countryCode, rolling(d => d.new_daily_cases)) : undefined
+      let rollingDeaths = rollingDefined ? this.normalize(countryCode, rolling(d => d.new_daily_deaths)) : undefined
+
       return ({
         date: date,
         cases: this.normalize(countryCode, day.new_daily_cases),
-        rollingCases: this.normalize(countryCode, rolling(d => d.new_daily_cases)),
+        rollingCases: rollingCases,
         cumulativeCases: this.normalize(countryCode, day.total_cases),
         deaths: this.normalize(countryCode, day.new_daily_deaths),
-        rollingDeaths: this.normalize(countryCode, rolling(d => d.new_daily_deaths)),
+        rollingDeaths: rollingDeaths,
         cumulativeDeaths: this.normalize(countryCode, day.total_deaths)
       })
     })
@@ -304,6 +323,56 @@ class App extends Component<any, AppState> {
     return `${d.getMonth() + 1}/${dayString}/${d.getFullYear().toString().slice(2)}`
   }
 
+  toggleDrawer(open: boolean) {
+    return (
+      event: React.KeyboardEvent | React.MouseEvent,
+    ) => {
+      if (
+        event.type === 'keydown' &&
+        ((event as React.KeyboardEvent).key === 'Tab' ||
+          (event as React.KeyboardEvent).key === 'Shift')
+      ) {
+        return;
+      }
+
+      this.setState({ ...this.state, showSettingsDrawer: open });
+    }
+  }
+
+  getLabelledValues<T>(suggested: LabelledValue<T>[], current: LabelledValue<T>): LabelledValue<T>[] {
+    return (suggested.map(v => v.value).indexOf(current.value) >= 0)
+      ? suggested
+      : _.sortBy(_.concat(suggested, current), 'value')
+  }
+
+  getRollingAverageValues() {
+    let current = this.getSettings().rollingDays.value
+    return this.getLabelledValues([
+      { label: "1 Day", value: 1 },
+      { label: "3 Days", value: 3 },
+      { label: "5 Days", value: 5 },
+      { label: "1 Week", value: 7 },
+      { label: "2 Weeks", value: 15 },
+      { label: "3 Weeks", value: 21 },
+      { label: "1 Month", value: 30 }
+    ],
+      { label: `${current} Days`, value: current }
+    )
+  }
+
+  getStartAtValues() {
+    let current = this.getSettings().startAtFirstDeaths.value
+    return this.getLabelledValues([
+      { label: "1 Case", value: 0 },
+      { label: "1 Death", value: 1 },
+      { label: "5 Deaths", value: 5 },
+      { label: "10 Deaths", value: 10 },
+      { label: "100 Deaths", value: 100 }
+    ],
+      { label: `${current} Deaths`, value: current }
+    )
+  }
+
   render() {
     const { country } = this.state;
     if (country.length === 0) return <div />
@@ -327,13 +396,13 @@ class App extends Component<any, AppState> {
     let chartContent = numberOfCharts > 0 ?
       <Paper elevation={2}>
         {Array.from(Array(numberOfCharts).keys()).map(i =>
-                <CoronaChart key={i} title={allDataCharts[0][i].title} labels={dates} datasets={allDataCharts.map(s => s[i].datasets).flat()} />
+          <CoronaChart key={i} title={allDataCharts[0][i].title} labels={dates} datasets={allDataCharts.map(s => s[i].datasets).flat()} />
         )}
       </Paper>
-       :
-       <Paper style={{margin: 'auto', width: 'fit-content'}}>
-        <Alert style={{maxWidth: 256}} severity="error">Selected country is missing data!</Alert>
-       </Paper>
+      :
+      <Paper style={{ margin: 'auto', width: 'fit-content' }}>
+        <Alert style={{ maxWidth: 256 }} severity="error">Selected country is missing data!</Alert>
+      </Paper>
 
     return (
       <Container maxWidth="xl">
@@ -391,8 +460,57 @@ class App extends Component<any, AppState> {
                 label="Comparison Mode"
               />
             </Box>
+            <div className={this.props.classes.grow}></div>
+            <Box><Button onClick={this.toggleDrawer(true)}><SettingsIcon /></Button></Box>
           </Toolbar>
         </AppBar>
+        <Drawer anchor="right" open={this.state.showSettingsDrawer} onClose={this.toggleDrawer(false)}>
+          <Card onClick={this.toggleDrawer(false)}>
+            <CardContent>
+              <List>
+                <ListItem>
+                  <Typography variant="h5" gutterBottom>
+                    Settings
+                  </Typography>
+                </ListItem>
+              </List>
+              <ListItem>
+                <FormControl style={{ minWidth: 120 }}>
+                  <InputLabel id="select-rolling-days">Rolling Average</InputLabel>
+                  <Select
+                    labelId="select-rolling-days"
+                    id="select-rolling-days"
+                    value={this.getSettings().rollingDays.value}
+                    onChange={(e) =>
+                      this.update(this.getCountryCodes(),
+                        { ...this.getSettings(), rollingDays: ({ s: RollingDays, value: e.target.value as number }) })
+                    }>
+                    {this.getRollingAverageValues().map(labelledValue =>
+                      <MenuItem key={labelledValue.value} value={labelledValue.value}>{labelledValue.label}</MenuItem>
+                    )}
+                  </Select>
+                </FormControl>
+              </ListItem>
+              <ListItem>
+                <FormControl style={{ minWidth: 120 }}>
+                  <InputLabel id="select-start-deaths">Start After</InputLabel>
+                  <Select
+                    labelId="select-start-deaths"
+                    id="select-start-deaths"
+                    value={this.getSettings().startAtFirstDeaths.value}
+                    onChange={(e) =>
+                      this.update(this.getCountryCodes(),
+                        { ...this.getSettings(), startAtFirstDeaths: ({ s: StartAtFirstDeaths, value: e.target.value as number }) })
+                    }>
+                    {this.getStartAtValues().map(labelledValue =>
+                      <MenuItem key={labelledValue.value} value={labelledValue.value}>{labelledValue.label}</MenuItem>
+                    )}
+                  </Select>
+                </FormControl>
+              </ListItem>
+            </CardContent>
+          </Card>
+        </Drawer>
         <Box marginTop={4}>
           {chartContent}
         </Box>
@@ -401,4 +519,4 @@ class App extends Component<any, AppState> {
   }
 }
 
-export default App;
+export default withStyles(styles)(App)
