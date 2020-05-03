@@ -4,7 +4,7 @@ import { Country, DataPoint, DateDataPoints, Info } from './api/Country'
 import { isNumber } from 'util'
 import { CoronaChart, Dataset } from './Chart'
 import Select from '@material-ui/core/Select'
-import { MenuItem, FormControl, InputLabel, Container, AppBar, Toolbar, Checkbox, FormControlLabel, Box, Paper, Button, Drawer, Theme, List, ListItem, Typography, Card, CardContent } from '@material-ui/core'
+import { MenuItem, FormControl, InputLabel, Container, AppBar, Toolbar, Checkbox, FormControlLabel, Box, Paper, Button, Theme } from '@material-ui/core'
 import Alert from '@material-ui/lab/Alert';
 import countryCodes from './data/countryCodes.json'
 import { countryPopulations } from './data/CountryPopulations'
