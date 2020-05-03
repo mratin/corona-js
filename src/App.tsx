@@ -13,6 +13,7 @@ import queryString, { ParsedUrlQuery } from 'querystring'
 import _ from 'lodash'
 import { withStyles } from '@material-ui/styles'
 import SettingsIcon from '@material-ui/icons/Settings'
+import { SettingsDrawer } from './SettingsDrawer'
 
 const styles = (theme: Theme) => ({
   grow: {
@@ -53,7 +54,7 @@ interface DataChart {
   datasets: Dataset[]
 }
 
-interface Settings {
+export interface Settings {
   normalized: SValue<boolean>,
   comparisonMode: SValue<boolean>,
   startAtFirstDeaths: SValue<number>,
@@ -93,20 +94,22 @@ const numberSetting = (name: string, defaultValue: number) => ({
 
 const Normalized: S<boolean> = booleanSetting('normalized', false)
 const ComparisonMode: S<boolean> = booleanSetting('comparisonMode', false)
-const StartAtFirstDeaths: S<number> = numberSetting('startAtFirstDeaths', 0)
-const RollingDays: S<number> = numberSetting('rollingDays', 7)
+export const StartAtFirstDeaths: S<number> = numberSetting('startAtFirstDeaths', 0)
+export const RollingDays: S<number> = numberSetting('rollingDays', 7)
 
 interface SValue<T> {
   s: S<T>,
   value: T
 }
 
-interface LabelledValue<T> {
-  label: string,
-  value: T
-}
-
 class App extends Component<any, AppState> {
+  constructor(props: any) {
+    super(props)
+    
+    this.update = this.update.bind(this)
+    this.toggleDrawer = this.toggleDrawer.bind(this)
+  }
+
   state: AppState = {
     selectedCountries: [],
     showSettingsDrawer: false
@@ -340,42 +343,8 @@ class App extends Component<any, AppState> {
     }
   }
 
-  getLabelledValues<T>(suggested: LabelledValue<T>[], current: LabelledValue<T>): LabelledValue<T>[] {
-    return (suggested.map(v => v.value).indexOf(current.value) >= 0)
-      ? suggested
-      : _.sortBy(_.concat(suggested, current), 'value')
-  }
-
-  getRollingAverageValues() {
-    let current = this.getSettings().rollingDays.value
-    return this.getLabelledValues([
-      { label: "1 Day", value: 1 },
-      { label: "3 Days", value: 3 },
-      { label: "5 Days", value: 5 },
-      { label: "1 Week", value: 7 },
-      { label: "2 Weeks", value: 15 },
-      { label: "3 Weeks", value: 21 },
-      { label: "1 Month", value: 30 }
-    ],
-      { label: `${current} Days`, value: current }
-    )
-  }
-
-  getStartAtValues() {
-    let current = this.getSettings().startAtFirstDeaths.value
-    return this.getLabelledValues([
-      { label: "1 Case", value: 0 },
-      { label: "1 Death", value: 1 },
-      { label: "5 Deaths", value: 5 },
-      { label: "10 Deaths", value: 10 },
-      { label: "100 Deaths", value: 100 }
-    ],
-      { label: `${current} Deaths`, value: current }
-    )
-  }
-
   render() {
-    const { selectedCountries } = this.state;
+    const { selectedCountries, showSettingsDrawer } = this.state;
     const comparisonModeOn = this.getSettings().comparisonMode.value;
 
     const countriesWithData = selectedCountries.filter(c => c.timelineitems)
@@ -446,6 +415,7 @@ class App extends Component<any, AppState> {
               <FormControlLabel
                 control={
                   <Checkbox
+                    disabled={selectedCountries.length === 0}
                     checked={this.getSettings().normalized.value}
                     onChange={(e) => this.update(this.getCountryCodes(),
                       { ...this.getSettings(), normalized: ({ s: Normalized, value: e.target.checked }) })
@@ -458,6 +428,7 @@ class App extends Component<any, AppState> {
               <FormControlLabel
                 control={
                   <Checkbox
+                    disabled={selectedCountries.length === 0}
                     checked={this.getSettings().comparisonMode.value}
                     onChange={(e) =>
                       this.update(this.getCountryCodes(),
@@ -473,53 +444,14 @@ class App extends Component<any, AppState> {
             <Box><Button onClick={this.toggleDrawer(true)}><SettingsIcon /></Button></Box>
           </Toolbar>
         </AppBar>
-        <Drawer anchor="right" open={this.state.showSettingsDrawer} onClose={this.toggleDrawer(false)}>
-          <Card onClick={this.toggleDrawer(false)}>
-            <CardContent>
-              <List>
-                <ListItem>
-                  <Typography variant="h5" gutterBottom>
-                    Settings
-                  </Typography>
-                </ListItem>
-              </List>
-              <ListItem>
-                <FormControl style={{ minWidth: 120 }}>
-                  <InputLabel id="select-rolling-days">Rolling Average</InputLabel>
-                  <Select
-                    labelId="select-rolling-days"
-                    id="select-rolling-days"
-                    value={this.getSettings().rollingDays.value}
-                    onChange={(e) =>
-                      this.update(this.getCountryCodes(),
-                        { ...this.getSettings(), rollingDays: ({ s: RollingDays, value: e.target.value as number }) })
-                    }>
-                    {this.getRollingAverageValues().map(labelledValue =>
-                      <MenuItem key={labelledValue.value} value={labelledValue.value}>{labelledValue.label}</MenuItem>
-                    )}
-                  </Select>
-                </FormControl>
-              </ListItem>
-              <ListItem>
-                <FormControl style={{ minWidth: 120 }}>
-                  <InputLabel id="select-start-deaths">Start After</InputLabel>
-                  <Select
-                    labelId="select-start-deaths"
-                    id="select-start-deaths"
-                    value={this.getSettings().startAtFirstDeaths.value}
-                    onChange={(e) =>
-                      this.update(this.getCountryCodes(),
-                        { ...this.getSettings(), startAtFirstDeaths: ({ s: StartAtFirstDeaths, value: e.target.value as number }) })
-                    }>
-                    {this.getStartAtValues().map(labelledValue =>
-                      <MenuItem key={labelledValue.value} value={labelledValue.value}>{labelledValue.label}</MenuItem>
-                    )}
-                  </Select>
-                </FormControl>
-              </ListItem>
-            </CardContent>
-          </Card>
-        </Drawer>
+        <SettingsDrawer
+          isOpen={showSettingsDrawer}
+          settings={this.getSettings()}
+          countryCodes={this.getCountryCodes()}
+          update={this.update}
+          toggleDrawer={this.toggleDrawer}
+          hasSelectedCountry={selectedCountries.length > 0}
+        />
         <Box marginTop={4}>
           {chartContent}
         </Box>
