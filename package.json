@@ -4,7 +4,7 @@
   "private": true,
   "homepage": "http://mratin.github.io/corona-js",
   "dependencies": {
-    "@material-ui/core": "^4.9.11",
+    "@material-ui/core": "^4.11.0",
     "@material-ui/icons": "^4.9.1",
     "@material-ui/lab": "^4.0.0-alpha.56",
     "@testing-library/jest-dom": "^5.11.4",
